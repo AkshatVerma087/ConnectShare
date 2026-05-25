@@ -1,0 +1,60 @@
+services:
+  app:
+    build:
+      context: .
+      target: app
+    image: connectshare-app:local
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: http://localhost:8080
+      APP_KEY: base64:QmFzZTY0S2V5U2VjcmV0S2V5U2VjcmV0S2VjcmV0U2VjcmV0MTIzNDU2Nzg5MA==
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_DATABASE: connectshare
+      DB_USERNAME: connectshare
+      DB_PASSWORD: connectshare
+      SESSION_DRIVER: database
+      CACHE_STORE: database
+      QUEUE_CONNECTION: sync
+      FILESYSTEM_DISK: public
+      VITE_APP_NAME: ConnectShare
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - connectshare-storage:/var/www/html/storage
+      - connectshare-bootstrap-cache:/var/www/html/bootstrap/cache
+
+  web:
+    build:
+      context: .
+      target: web
+    image: connectshare-web:local
+    depends_on:
+      - app
+    ports:
+      - "8080:80"
+    volumes:
+      - connectshare-storage:/var/www/html/storage:ro
+      - connectshare-bootstrap-cache:/var/www/html/bootstrap/cache:ro
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: connectshare
+      POSTGRES_USER: connectshare
+      POSTGRES_PASSWORD: connectshare
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U connectshare -d connectshare"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - connectshare-db:/var/lib/postgresql/data
+
+volumes:
+  connectshare-storage:
+  connectshare-bootstrap-cache:
+  connectshare-db:
