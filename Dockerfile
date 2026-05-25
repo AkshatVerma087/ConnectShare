@@ -39,8 +39,8 @@ FROM node:22-alpine AS frontend
 
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install --no-fund --no-audit
+COPY package.json package-lock.json ./
+RUN npm ci --no-fund --no-audit
 
 COPY resources ./resources
 COPY vite.config.js postcss.config.js tailwind.config.js ./

@@ -4,11 +4,12 @@ services:
       context: .
       target: app
     image: connectshare-app:local
+    restart: unless-stopped
     environment:
       APP_ENV: local
       APP_DEBUG: "true"
       APP_URL: http://localhost:8080
-      APP_KEY: base64:QmFzZTY0S2V5U2VjcmV0S2V5U2VjcmV0S2VjcmV0U2VjcmV0MTIzNDU2Nzg5MA==
+      APP_KEY: ${APP_KEY:?Set APP_KEY in .env or export it before running docker compose}
       DB_CONNECTION: pgsql
       DB_HOST: db
       DB_PORT: "5432"
@@ -26,12 +27,15 @@ services:
     volumes:
       - connectshare-storage:/var/www/html/storage
       - connectshare-bootstrap-cache:/var/www/html/bootstrap/cache
+    networks:
+      - connectshare
 
   web:
     build:
       context: .
       target: web
     image: connectshare-web:local
+    restart: unless-stopped
     depends_on:
       - app
     ports:
@@ -39,9 +43,12 @@ services:
     volumes:
       - connectshare-storage:/var/www/html/storage:ro
       - connectshare-bootstrap-cache:/var/www/html/bootstrap/cache:ro
+    networks:
+      - connectshare
 
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: connectshare
       POSTGRES_USER: connectshare
@@ -53,8 +60,35 @@ services:
       retries: 5
     volumes:
       - connectshare-db:/var/lib/postgresql/data
+    networks:
+      - connectshare
+
+  # Run migrations on first start: docker compose run --rm migrate
+  migrate:
+    image: connectshare-app:local
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_ENV: local
+      APP_KEY: ${APP_KEY:?Set APP_KEY in .env or export it before running docker compose}
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_DATABASE: connectshare
+      DB_USERNAME: connectshare
+      DB_PASSWORD: connectshare
+    command: ["php", "artisan", "migrate", "--force"]
+    profiles:
+      - init
+    networks:
+      - connectshare
 
 volumes:
   connectshare-storage:
   connectshare-bootstrap-cache:
   connectshare-db:
+
+networks:
+  connectshare:
+    driver: bridge
