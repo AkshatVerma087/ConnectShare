@@ -63,7 +63,7 @@ services:
     networks:
       - connectshare
 
-  # Run migrations on first start: docker compose run --rm migrate
+  # Run migrations manually: docker compose run --rm migrate
   migrate:
     image: connectshare-app:local
     depends_on:
@@ -78,7 +78,8 @@ services:
       DB_DATABASE: connectshare
       DB_USERNAME: connectshare
       DB_PASSWORD: connectshare
-    command: ["php", "artisan", "migrate", "--force"]
+    entrypoint: ["php"]
+    command: ["artisan", "migrate", "--force"]
     profiles:
       - init
     networks:

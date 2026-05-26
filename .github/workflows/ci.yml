@@ -1,4 +1,4 @@
-name: CI / Deploy to Vercel
+name: CI / Deploy
 
 on:
   push:
@@ -53,12 +53,45 @@ jobs:
           DB_DATABASE: ":memory:"
 
   # ──────────────────────────────────────────────
-  # Job 2: Build & Deploy to Vercel
+  # Job 2: Docker Build Validation
+  # ──────────────────────────────────────────────
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build app image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: app
+          push: false
+          tags: connectshare-app:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: web
+          push: false
+          tags: connectshare-web:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ──────────────────────────────────────────────
+  # Job 3: Build & Deploy to Vercel
   # ──────────────────────────────────────────────
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - name: Checkout repository
@@ -95,11 +128,11 @@ jobs:
       - name: Build frontend assets
         run: npm run build
 
-      - name: Deploy to Vercel
+      - name: Deploy to Vercel (Production)
         uses: amondnet/vercel-action@v25
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          vercel-args: ${{ github.ref == 'refs/heads/main' && '--prod' || '' }}
+          vercel-args: "--prod"

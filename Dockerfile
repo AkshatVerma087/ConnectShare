@@ -39,7 +39,7 @@ FROM node:22-alpine AS frontend
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci --no-fund --no-audit
 
 COPY resources ./resources
@@ -54,12 +54,16 @@ COPY . .
 COPY --from=vendor /var/www/html/vendor ./vendor
 COPY --from=frontend /app/public/build ./public/build
 
-RUN rm -f bootstrap/cache/*.php \
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh \
+    && rm -f bootstrap/cache/*.php \
     && mkdir -p storage/framework/{cache,sessions,testing,views} bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
 
 
 FROM runtime-base AS app
+
+ENTRYPOINT ["entrypoint.sh"]
 
 USER www-data
 

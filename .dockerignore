@@ -9,7 +9,15 @@ storage/framework/testing
 storage/framework/views
 .env
 .env.*
+!.env.example
+docker-compose.yml
 docker-compose.override.yml
 .vscode
 .idea
+.vercel
+.phpunit.result.cache
+.phpunit.cache
 tests
+*.md
+Thumbs.db
+.DS_Store
