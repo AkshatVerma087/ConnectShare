@@ -1,3 +1,9 @@
+# ============================================================
+# ConnectShare — Railway Production Dockerfile
+# Single container: Nginx + PHP-FPM via supervisord
+# ============================================================
+
+# ── Stage 1: PHP base ──────────────────────────────────────
 FROM php:8.4-fpm-alpine AS php-base
 
 WORKDIR /var/www/html
@@ -11,18 +17,21 @@ RUN apk add --no-cache \
         libzip \
         oniguruma \
         unzip \
+        nginx \
+        supervisor \
     && apk add --no-cache --virtual .build-deps \
         $PHPIZE_DEPS \
         icu-dev \
         libzip-dev \
         oniguruma-dev \
         postgresql-dev \
-    && docker-php-ext-install pdo_pgsql mbstring intl zip opcache \
+    && docker-php-ext-install pdo_pgsql mbstring intl zip opcache bcmath \
     && apk del --no-network .build-deps
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 
+# ── Stage 2: Composer dependencies ─────────────────────────
 FROM php-base AS vendor
 
 COPY composer.json composer.lock ./
@@ -35,6 +44,7 @@ RUN composer install \
     --optimize-autoloader
 
 
+# ── Stage 3: Frontend build ────────────────────────────────
 FROM node:22-alpine AS frontend
 
 WORKDIR /app
@@ -48,37 +58,40 @@ COPY vite.config.js postcss.config.js tailwind.config.js ./
 RUN npm run build
 
 
-FROM php-base AS runtime-base
+# ── Stage 4: Production image ──────────────────────────────
+FROM php-base AS production
 
+# Copy application code
 COPY . .
 COPY --from=vendor /var/www/html/vendor ./vendor
 COPY --from=frontend /app/public/build ./public/build
 
-COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+# Copy Railway-specific configs
+COPY docker/railway/nginx.conf /etc/nginx/http.d/default.conf
+COPY docker/railway/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY docker/railway/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/railway/php-fpm-pool.conf /usr/local/etc/php-fpm.d/zz-railway.conf
+
+# PHP production optimizations
+COPY docker/railway/php.ini /usr/local/etc/php/conf.d/99-railway.ini
+
+# Permissions & directories
 RUN chmod +x /usr/local/bin/entrypoint.sh \
     && rm -f bootstrap/cache/*.php \
-    && mkdir -p storage/framework/{cache,sessions,testing,views} bootstrap/cache \
-    && chown -R www-data:www-data storage bootstrap/cache
+    && mkdir -p \
+        storage/framework/{cache,sessions,testing,views} \
+        storage/logs \
+        storage/app/public \
+        bootstrap/cache \
+        /var/log/supervisor \
+        /run/nginx \
+    && chown -R www-data:www-data storage bootstrap/cache \
+    && chmod -R 775 storage bootstrap/cache
 
+# Railway dynamically assigns PORT — default to 8080
+ENV PORT=8080
 
-FROM runtime-base AS app
+EXPOSE ${PORT}
 
 ENTRYPOINT ["entrypoint.sh"]
-
-USER www-data
-
-EXPOSE 9000
-
-CMD ["php-fpm", "-F"]
-
-
-FROM nginx:1.27-alpine AS web
-
-WORKDIR /var/www/html
-
-COPY docker/nginx/default.conf /etc/nginx/conf.d/default.conf
-COPY --from=runtime-base /var/www/html/public ./public
-
-EXPOSE 80
-
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
